@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Simulink WebView Navigator</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+        <!-- Startsida för version- och produktval -->
+        <div id="welcome-screen" class="welcome-screen">
+            <div class="welcome-content">
+                <h1>📊 Simulink WebView Navigator</h1>
+                <p class="subtitle">Välj version och produkt för att börja navigera</p>
+                
+                <div id="version-grid" class="version-grid">
+                    <div class="grid-placeholder">
+                        <div class="spinner"></div>
+                        <p>Laddar tillgängliga versioner...</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Huvudapplikation (dold initialt) -->
+        <div id="main-app" class="main-app hidden">
+            <!-- Sidomeny med trädnavigering -->
+            <aside class="sidebar">
+                <div class="sidebar-header">
+                    <h1>WebView Navigator</h1>
+                    <button id="back-btn" class="btn-secondary">← Tillbaka</button>
+                </div>
+                
+                <!-- Aktuell version/produkt -->
+                <div class="current-selection">
+                    <div class="selection-info">
+                        <span class="label">Version:</span>
+                        <span id="current-version">-</span>
+                    </div>
+                    <div class="selection-info">
+                        <span class="label">Produkt:</span>
+                        <span id="current-product">-</span>
+                    </div>
+                </div>
+                
+                <!-- Trädnavigering -->
+                <div class="tree-navigation">
+                    <h3>Navigation</h3>
+                    <div id="tree-container" class="tree-container">
+                        <p class="placeholder">Laddar träd...</p>
+                    </div>
+                </div>
+                
+                <!-- Filinfo -->
+                <div class="file-info">
+                    <h3>Aktuell fil</h3>
+                    <div id="file-info-content">
+                        <p class="placeholder">Ingen fil vald</p>
+                    </div>
+                </div>
+            </aside>
+            
+            <!-- Huvudområde med SVG-visning -->
+            <main class="main-content">
+                <div class="toolbar">
+                    <button id="zoom-in" class="btn-icon" title="Zooma in">🔍+</button>
+                    <button id="zoom-out" class="btn-icon" title="Zooma ut">🔍-</button>
+                    <button id="reset-zoom" class="btn-icon" title="Återställ zoom">↺</button>
+                    <span class="separator">|</span>
+                    <button id="fit-screen" class="btn-icon" title="Anpassa till skärm">⛶</button>
+                    <span class="separator">|</span>
+                    <span id="current-file-name" class="current-file-name"></span>
+                </div>
+                
+                <!-- SVG-container -->
+                <div class="svg-viewer-wrapper">
+                    <div id="svg-stack-container" class="svg-stack">
+                        <div class="placeholder-content">
+                            <h2>Ingen fil vald</h2>
+                            <p>Välj en fil från trädet till vänster</p>
+                        </div>
+                    </div>
+                    
+                    <!-- Metadata popup (visas vid klick) -->
+                    <div id="metadata-popup" class="metadata-popup hidden">
+                        <div class="popup-header">
+                            <h3 id="popup-title">Block-information</h3>
+                            <button id="popup-close" class="popup-close">×</button>
+                        </div>
+                        <div id="popup-content" class="popup-content">
+                            <!-- Metadata visas här -->
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Laddningsindikator -->
+                <div id="loading-indicator" class="loading-indicator hidden">
+                    <div class="spinner"></div>
+                    <p>Laddar...</p>
+                </div>
+            </main>
+        </div>
+    </div>
+    
+    <script src="app.js"></script>
+</body>
+</html>
