@@ -1,6 +1,6 @@
 /**
- * Simulink WebView Navigator - Frontend JavaScript v2.0
- * Dynamisk trädnavigering baserat på JSON-metadata
+ * Simulink WebView Navigator - Frontend JavaScript v3.0
+ * Produkt-först navigation med WebView_[Produkt] stöd
  */
 
 // Konfiguration
@@ -8,9 +8,9 @@ const API_BASE_URL = 'http://localhost:5000/api';
 
 // Global state
 const state = {
-    versions: [],
-    currentVersion: null,
+    products: [],
     currentProduct: null,
+    currentVersion: null,
     navigationTree: null,
     currentNode: null,
     zoomLevel: 1.0
@@ -20,7 +20,7 @@ const state = {
 const elements = {
     welcomeScreen: null,
     mainApp: null,
-    versionGrid: null,
+    productGrid: null,
     treeContainer: null,
     svgStackContainer: null,
     fileInfoContent: null,
@@ -45,7 +45,7 @@ const elements = {
 document.addEventListener('DOMContentLoaded', () => {
     initializeElements();
     attachEventListeners();
-    loadVersions();
+    loadProducts();
 });
 
 /**
@@ -54,7 +54,7 @@ document.addEventListener('DOMContentLoaded', () => {
 function initializeElements() {
     elements.welcomeScreen = document.getElementById('welcome-screen');
     elements.mainApp = document.getElementById('main-app');
-    elements.versionGrid = document.getElementById('version-grid');
+    elements.productGrid = document.getElementById('version-grid'); // Återanvänder samma ID
     elements.treeContainer = document.getElementById('tree-container');
     elements.svgStackContainer = document.getElementById('svg-stack-container');
     elements.fileInfoContent = document.getElementById('file-info-content');
@@ -77,47 +77,61 @@ function initializeElements() {
  * Koppla event listeners
  */
 function attachEventListeners() {
-    elements.backBtn.addEventListener('click', showWelcomeScreen);
+    elements.backBtn.addEventListener('click', handleBackButton);
     elements.zoomInBtn.addEventListener('click', () => adjustZoom(1.2));
     elements.zoomOutBtn.addEventListener('click', () => adjustZoom(0.8));
     elements.resetZoomBtn.addEventListener('click', resetZoom);
     elements.fitScreenBtn.addEventListener('click', fitToScreen);
     elements.popupClose.addEventListener('click', closeMetadataPopup);
     
-    // Stäng popup vid klick utanför
     elements.metadataPopup.addEventListener('click', (e) => {
         if (e.target === elements.metadataPopup) {
             closeMetadataPopup();
         }
     });
     
-    // Tangentbordsgenvägar
     document.addEventListener('keydown', handleKeyboardShortcuts);
 }
 
 /**
- * API-anrop: Hämta alla versioner och visa dem på startsidan
+ * Hantera tillbaka-knapp (olika beteende beroende på state)
  */
-async function loadVersions() {
+function handleBackButton() {
+    if (state.currentVersion && state.currentProduct) {
+        // Om vi visar ett träd, gå tillbaka till versionsval
+        showVersionSelection(state.currentProduct);
+    } else if (state.currentProduct) {
+        // Om vi visar versioner, gå tillbaka till produktval
+        showWelcomeScreen();
+    } else {
+        // Annars gå till startsidan
+        showWelcomeScreen();
+    }
+}
+
+/**
+ * API-anrop: Hämta alla produkter
+ */
+async function loadProducts() {
     showLoading(true);
     
     try {
-        const response = await fetch(`${API_BASE_URL}/versions`);
+        const response = await fetch(`${API_BASE_URL}/products`);
         const data = await response.json();
         
         if (data.error) {
             throw new Error(data.error);
         }
         
-        state.versions = data.versions || [];
-        renderVersionCards();
+        state.products = data.products || [];
+        renderProductCards();
         
-        console.log(`Hittade ${state.versions.length} versioner`);
+        console.log(`Hittade ${state.products.length} produkter`);
     } catch (error) {
-        console.error('Fel vid laddning av versioner:', error);
-        elements.versionGrid.innerHTML = `
+        console.error('Fel vid laddning av produkter:', error);
+        elements.productGrid.innerHTML = `
             <div class="grid-placeholder">
-                <p style="color: #ef4444;">❌ Kunde inte ladda versioner</p>
+                <p style="color: #ef4444;">❌ Kunde inte ladda produkter</p>
                 <p style="font-size: 0.875rem; margin-top: 0.5rem;">Kontrollera att backend körs på ${API_BASE_URL}</p>
                 <p style="font-size: 0.75rem; margin-top: 0.5rem; opacity: 0.8;">${error.message}</p>
             </div>
@@ -128,136 +142,122 @@ async function loadVersions() {
 }
 
 /**
- * Rendera versionskort på startsidan
+ * Rendera produktkort på startsidan
  */
-function renderVersionCards() {
-    if (state.versions.length === 0) {
-        elements.versionGrid.innerHTML = `
+function renderProductCards() {
+    if (state.products.length === 0) {
+        elements.productGrid.innerHTML = `
             <div class="grid-placeholder">
-                <p>Inga versioner hittades.</p>
+                <p>Inga produkter hittades.</p>
             </div>
         `;
         return;
     }
     
-    elements.versionGrid.innerHTML = '';
+    elements.productGrid.innerHTML = '';
     
-    state.versions.forEach(versionData => {
+    state.products.forEach(product => {
         const card = document.createElement('div');
         card.className = 'version-card';
-        
-        let productsHTML = '';
-        if (versionData.products && versionData.products.length > 0) {
-            productsHTML = '<div class="products">';
-            versionData.products.forEach(product => {
-                productsHTML += `
-                    <div class="product-item" data-version="${versionData.version}" data-product="${product.name}">
-                        <span class="product-name">📄 ${product.name}</span>
-                    </div>
-                `;
-            });
-            productsHTML += '</div>';
-            
-            // Lägg till warmup-knapp
-            productsHTML += `
-                <button class="warmup-btn" data-version="${versionData.version}">
-                    🔥 Förbered version (snabbare laddning)
-                </button>
-            `;
-        } else {
-            productsHTML = '<p style="color: var(--text-secondary); font-size: 0.875rem;">Inga produkter hittades</p>';
-        }
+        card.style.cursor = 'pointer';
         
         card.innerHTML = `
-            <h2>Version ${versionData.version_display}</h2>
-            <p style="color: var(--text-secondary); font-size: 0.875rem;">${versionData.product_count} produkt(er)</p>
-            <div class="warmup-status" data-version="${versionData.version}"></div>
-            ${productsHTML}
+            <h2>📦 ${product.name}</h2>
+            <p style="color: var(--text-secondary); font-size: 0.875rem;">
+                ${product.version_count} version(er)
+            </p>
+            ${product.latest_version ? `
+                <p style="color: var(--text-secondary); font-size: 0.75rem; margin-top: 0.5rem;">
+                    Senaste: ${product.latest_version}
+                </p>
+            ` : ''}
         `;
         
-        // Lägg till klick-lyssnare på produkter
-        card.querySelectorAll('.product-item').forEach(productItem => {
-            productItem.addEventListener('click', () => {
-                const version = productItem.dataset.version;
-                const product = productItem.dataset.product;
-                loadProduct(version, product);
-            });
+        card.addEventListener('click', () => {
+            showVersionSelection(product.name);
         });
         
-        // Lägg till klick-lyssnare på warmup-knapp
-        const warmupBtn = card.querySelector('.warmup-btn');
-        if (warmupBtn) {
-            warmupBtn.addEventListener('click', (e) => {
-                e.stopPropagation();
-                const version = warmupBtn.dataset.version;
-                warmupVersion(version, warmupBtn);
-            });
-        }
-        
-        elements.versionGrid.appendChild(card);
+        elements.productGrid.appendChild(card);
     });
 }
 
 /**
- * Värm upp (pre-build) alla träd för en version
+ * Visa versionsval för en produkt
  */
-async function warmupVersion(version, buttonElement) {
-    const statusElement = document.querySelector(`.warmup-status[data-version="${version}"]`);
-    
-    buttonElement.disabled = true;
-    buttonElement.textContent = '⏳ Förbereder...';
-    statusElement.innerHTML = '<p style="color: #f59e0b; font-size: 0.875rem;">Bygger träd i bakgrunden...</p>';
+async function showVersionSelection(productName) {
+    showLoading(true);
+    state.currentProduct = productName;
     
     try {
-        const response = await fetch(`${API_BASE_URL}/version/${version}/warmup`);
+        const response = await fetch(`${API_BASE_URL}/product/${productName}/versions`);
         const data = await response.json();
         
         if (data.error) {
             throw new Error(data.error);
         }
         
-        console.log('Warmup klar:', data);
-        
-        buttonElement.textContent = '✅ Redo!';
-        buttonElement.style.backgroundColor = '#10b981';
-        statusElement.innerHTML = `
-            <p style="color: #10b981; font-size: 0.875rem;">
-                ✅ ${data.products_processed} produkter förberedda 
-                (${data.cache_size} träd i cache)
-            </p>
-        `;
-        
-        setTimeout(() => {
-            statusElement.innerHTML = '';
-        }, 5000);
-        
+        renderVersionCards(productName, data.versions);
+        console.log(`Hittade ${data.versions.length} versioner för ${productName}`);
     } catch (error) {
-        console.error('Warmup misslyckades:', error);
-        buttonElement.textContent = '❌ Misslyckades';
-        buttonElement.style.backgroundColor = '#ef4444';
-        statusElement.innerHTML = `<p style="color: #ef4444; font-size: 0.875rem;">Fel: ${error.message}</p>`;
-        
-        setTimeout(() => {
-            buttonElement.disabled = false;
-            buttonElement.textContent = '🔥 Förbered version';
-            buttonElement.style.backgroundColor = '';
-        }, 3000);
+        console.error('Fel vid laddning av versioner:', error);
+        showError(`Kunde inte ladda versioner: ${error.message}`);
+        showWelcomeScreen();
+    } finally {
+        showLoading(false);
     }
 }
 
 /**
- * Ladda en specifik produkt och bygg trädet
+ * Rendera versionskort för en produkt
  */
-async function loadProduct(version, productName) {
+function renderVersionCards(productName, versions) {
+    elements.productGrid.innerHTML = '';
+    
+    // Lägg till header med tillbaka-info
+    const header = document.createElement('div');
+    header.style.gridColumn = '1 / -1';
+    header.style.marginBottom = '1rem';
+    header.innerHTML = `
+        <h2 style="color: var(--text-primary); margin-bottom: 0.5rem;">
+            📦 ${productName}
+        </h2>
+        <p style="color: var(--text-secondary); font-size: 0.875rem;">
+            Välj version för att öppna
+        </p>
+    `;
+    elements.productGrid.appendChild(header);
+    
+    versions.forEach(versionData => {
+        const card = document.createElement('div');
+        card.className = 'version-card';
+        card.style.cursor = 'pointer';
+        
+        card.innerHTML = `
+            <h3>Version ${versionData.version}</h3>
+            <p style="color: var(--text-secondary); font-size: 0.75rem; margin-top: 0.5rem;">
+                ${versionData.folder}
+            </p>
+        `;
+        
+        card.addEventListener('click', () => {
+            loadProductVersion(productName, versionData.version);
+        });
+        
+        elements.productGrid.appendChild(card);
+    });
+}
+
+/**
+ * Ladda en specifik produkt och version
+ */
+async function loadProductVersion(productName, version) {
     showLoading(true);
     
     try {
-        // Spara aktuell version och produkt
-        state.currentVersion = version;
         state.currentProduct = productName;
+        state.currentVersion = version;
         
-        // Hämta trädet från backend
-        const response = await fetch(`${API_BASE_URL}/version/${version}/product/${productName}/tree`);
+        const response = await fetch(`${API_BASE_URL}/product/${productName}/version/${version}/tree`);
         const data = await response.json();
         
         if (data.error) {
@@ -266,17 +266,12 @@ async function loadProduct(version, productName) {
         
         state.navigationTree = data;
         
-        // Visa huvudapplikationen
         showMainApp();
         
-        // Uppdatera UI
-        elements.currentVersionSpan.textContent = version.replace(/_/g, '.');
+        elements.currentVersionSpan.textContent = version;
         elements.currentProductSpan.textContent = productName;
         
-        // Rendera trädet
         renderNavigationTree(data);
-        
-        // Ladda root-filen automatiskt
         loadNode(data);
         
         console.log('Träd laddat:', data);
@@ -305,7 +300,6 @@ function buildTreeNode(node, level = 0) {
     container.className = 'tree-node';
     container.style.marginLeft = `${level * 1}rem`;
     
-    // Skapa nod-element
     const item = document.createElement('div');
     item.className = 'tree-item file';
     
@@ -319,11 +313,9 @@ function buildTreeNode(node, level = 0) {
         ${node.children && node.children.length > 0 ? ` (${node.children.length})` : ''}
     `;
     
-    // Klick på nod laddar filen
     item.addEventListener('click', (e) => {
         e.stopPropagation();
         
-        // Toggle expandering om det finns barn
         if (node.children && node.children.length > 0) {
             item.classList.toggle('expanded');
             item.classList.toggle('collapsed');
@@ -334,17 +326,14 @@ function buildTreeNode(node, level = 0) {
             }
         }
         
-        // Ladda filen
         loadNode(node);
         
-        // Markera som aktiv
         document.querySelectorAll('.tree-item').forEach(t => t.classList.remove('active'));
         item.classList.add('active');
     });
     
     container.appendChild(item);
     
-    // Lägg till barn rekursivt
     if (node.children && node.children.length > 0) {
         const childrenContainer = document.createElement('div');
         childrenContainer.className = 'children-container';
@@ -367,19 +356,13 @@ async function loadNode(node) {
     state.currentNode = node;
     
     try {
-        // Hämta SVG-fil
         const svgResponse = await fetch(
-            `${API_BASE_URL}/version/${state.currentVersion}/file/${node.svg_path}`
+            `${API_BASE_URL}/product/${state.currentProduct}/version/${state.currentVersion}/file/${node.svg_path}`
         );
         const svgContent = await svgResponse.text();
         
-        // Visa SVG
         displaySVG(svgContent, node);
-        
-        // Uppdatera filinfo
         updateFileInfo(node);
-        
-        // Uppdatera filnamn i toolbar
         elements.currentFileName.textContent = node.svg;
         
         console.log('Fil laddad:', node.name);
@@ -403,71 +386,66 @@ function displaySVG(svgContent, node) {
     
     elements.svgStackContainer.appendChild(layer);
     
-    // Återställ och tillämpa zoom
     state.zoomLevel = 1.0;
     applyZoom();
     
-    // Lägg till klick-lyssnare på SVG-element
     attachSVGClickListeners(layer, node);
 }
 
 /**
- * Koppla klick-lyssnare till SVG-element för navigation
+ * Koppla klick-lyssnare till SVG-element
  */
 function attachSVGClickListeners(layer, node) {
     const svg = layer.querySelector('svg');
     if (!svg) return;
     
-    // Om noden har clickable_elements, använd dem för att identifiera klickbara element
     if (node.clickable_elements && node.clickable_elements.length > 0) {
         console.log('Klickbara element:', node.clickable_elements);
         
         node.clickable_elements.forEach(clickableEl => {
-            // Hitta motsvarande SVG-element
             let svgElement = null;
             
-            // 1. Försök hitta via exakt ID
-            if (clickableEl.id) {
-                svgElement = svg.querySelector(`[id="${clickableEl.id}"]`);
+            // Använd 'sid' istället för 'id'
+            const elementId = clickableEl.sid || clickableEl.id;
+            
+            if (elementId) {
+                // 1. Försök exakt matchning på ID
+                svgElement = svg.querySelector(`[id="${elementId}"]`);
                 
-                // Försök också utan namespace (t.ex "PS200:23345" → "23345")
-                if (!svgElement && clickableEl.id.includes(':')) {
-                    const simpleId = clickableEl.id.split(':').pop();
+                // 2. Om ID innehåller kolon (PS200:34341), försök med nummer-delen
+                if (!svgElement && elementId.includes(':')) {
+                    const simpleId = elementId.split(':').pop();
                     svgElement = svg.querySelector(`[id*="${simpleId}"]`);
+                }
+                
+                // 3. Försök med hela sid som substring
+                if (!svgElement) {
+                    const allElements = svg.querySelectorAll('[id]');
+                    svgElement = Array.from(allElements).find(el => {
+                        const elId = el.getAttribute('id');
+                        return elId && elId.includes(elementId);
+                    });
                 }
             }
             
-            // 2. Om inget ID finns i JSON, försök hitta via filnamn
-            if (!svgElement && clickableEl.name) {
-                // Försök hitta element vars ID innehåller filnamnet
+            // 4. Fallback: Sök baserat på label
+            if (!svgElement && clickableEl.label) {
                 const allElements = svg.querySelectorAll('[id]');
                 svgElement = Array.from(allElements).find(el => {
                     const elId = el.getAttribute('id');
-                    return elId && (
-                        elId.includes(clickableEl.name) ||
-                        clickableEl.name.includes(elId) ||
-                        elId.toLowerCase().includes(clickableEl.name.toLowerCase())
-                    );
+                    return elId && elId.toLowerCase().includes(clickableEl.label.toLowerCase());
                 });
-                
-                if (svgElement) {
-                    console.log(`Hittade element via filnamn-matchning: ${clickableEl.name} → ${svgElement.id}`);
-                }
             }
             
             if (svgElement) {
-                // Gör elementet klickbart
                 svgElement.style.cursor = 'pointer';
                 svgElement.style.transition = 'opacity 0.2s, filter 0.2s';
                 
-                // Lägg till visuell highlight
-                const originalFill = svgElement.getAttribute('fill');
                 const originalStroke = svgElement.getAttribute('stroke');
                 
                 svgElement.addEventListener('mouseenter', () => {
                     svgElement.style.opacity = '0.7';
                     svgElement.style.filter = 'brightness(1.2)';
-                    // Lägg till blå outline för att visa att det är klickbart
                     svgElement.setAttribute('stroke', '#2563eb');
                     svgElement.setAttribute('stroke-width', '2');
                 });
@@ -475,7 +453,6 @@ function attachSVGClickListeners(layer, node) {
                 svgElement.addEventListener('mouseleave', () => {
                     svgElement.style.opacity = '1';
                     svgElement.style.filter = 'none';
-                    // Återställ original stroke
                     if (originalStroke) {
                         svgElement.setAttribute('stroke', originalStroke);
                     } else {
@@ -484,24 +461,19 @@ function attachSVGClickListeners(layer, node) {
                     svgElement.removeAttribute('stroke-width');
                 });
                 
-                // Hantera enkelklick vs dubbelklick
                 let clickTimer = null;
                 
                 svgElement.addEventListener('click', (e) => {
                     e.stopPropagation();
                     
                     if (clickTimer === null) {
-                        // Första klicket - vänta på eventuellt dubbelklick
                         clickTimer = setTimeout(() => {
-                            // Enkelklick → Visa metadata
                             showElementMetadata(svgElement, clickableEl, node);
                             clickTimer = null;
-                        }, 250); // 250ms delay för att detektera dubbelklick
+                        }, 250);
                     } else {
-                        // Dubbelklick detekterat
                         clearTimeout(clickTimer);
                         clickTimer = null;
-                        // Dubbelklick → Navigera
                         handleSVGElementDoubleClick(svgElement, clickableEl, node);
                     }
                 });
@@ -509,59 +481,26 @@ function attachSVGClickListeners(layer, node) {
                 console.log('Klickbart element aktiverat:', clickableEl.id, '→', clickableEl.name);
             }
         });
-    } else {
-        // Fallback: Gör alla element med ID klickbara
-        console.warn('Inga clickable_elements i JSON - använder fallback (alla element med ID)');
-        const allElements = svg.querySelectorAll('[id]');
-        console.log(`Hittade ${allElements.length} element med ID i SVG`);
-        
-        allElements.forEach(element => {
-            element.style.cursor = 'pointer';
-            
-            element.addEventListener('mouseenter', () => {
-                element.style.opacity = '0.7';
-                // Visa vilket element man hovrar över
-                console.log('Hover på element:', element.id);
-            });
-            
-            element.addEventListener('mouseleave', () => {
-                element.style.opacity = '1';
-            });
-            
-            element.addEventListener('click', (e) => {
-                e.stopPropagation();
-                handleSVGElementClick(element, node);
-            });
-        });
     }
 }
 
 /**
- * Visa metadata för ett SVG-element (enkelklick)
+ * Visa metadata för ett SVG-element
  */
 function showElementMetadata(svgElement, clickableElement, currentNode) {
     const elementId = svgElement.getAttribute('id');
-    console.log('Visar metadata för:', elementId);
     
-    // Uppdatera popup-titel
     elements.popupTitle.textContent = clickableElement.name || elementId || 'Block-information';
     
-    // Bygg metadata-innehåll
     let html = '';
     
-    // Grundläggande information
     html += '<div class="metadata-section">';
     html += '<h4>Grundläggande</h4>';
     html += `<div class="metadata-row">
         <span class="metadata-label">ID:</span>
         <span class="metadata-value">${elementId || 'N/A'}</span>
     </div>`;
-    html += `<div class="metadata-row">
-        <span class="metadata-label">Typ:</span>
-        <span class="metadata-value">${clickableElement.metadata?.icon || 'SubSystemIcon_icon'}</span>
-    </div>`;
     
-    // Visa om det har undermoduler
     const hasChildren = currentNode.children && currentNode.children.some(child => 
         child.name === clickableElement.name || child.svg_element_id === clickableElement.id
     );
@@ -571,49 +510,9 @@ function showElementMetadata(svgElement, clickableElement, currentNode) {
     </div>`;
     html += '</div>';
     
-    // Metadata från JSON
     if (clickableElement.metadata) {
         const metadata = clickableElement.metadata;
         
-        // Position
-        if (metadata.position) {
-            html += '<div class="metadata-section">';
-            html += '<h4>Position</h4>';
-            if (metadata.position.x !== undefined) {
-                html += `<div class="metadata-row">
-                    <span class="metadata-label">X:</span>
-                    <span class="metadata-value">${metadata.position.x}</span>
-                </div>`;
-            }
-            if (metadata.position.y !== undefined) {
-                html += `<div class="metadata-row">
-                    <span class="metadata-label">Y:</span>
-                    <span class="metadata-value">${metadata.position.y}</span>
-                </div>`;
-            }
-            html += '</div>';
-        }
-        
-        // Bounds/Size
-        if (metadata.bounds) {
-            html += '<div class="metadata-section">';
-            html += '<h4>Storlek</h4>';
-            if (metadata.bounds.width !== undefined) {
-                html += `<div class="metadata-row">
-                    <span class="metadata-label">Bredd:</span>
-                    <span class="metadata-value">${metadata.bounds.width}</span>
-                </div>`;
-            }
-            if (metadata.bounds.height !== undefined) {
-                html += `<div class="metadata-row">
-                    <span class="metadata-label">Höjd:</span>
-                    <span class="metadata-value">${metadata.bounds.height}</span>
-                </div>`;
-            }
-            html += '</div>';
-        }
-        
-        // Parametrar (allt annat i metadata)
         const excludeKeys = ['icon', 'id', 'name', 'file', 'position', 'bounds'];
         const paramKeys = Object.keys(metadata).filter(key => !excludeKeys.includes(key));
         
@@ -622,7 +521,6 @@ function showElementMetadata(svgElement, clickableElement, currentNode) {
             html += '<h4>Parametrar</h4>';
             paramKeys.forEach(key => {
                 let value = metadata[key];
-                // Formatera värdet
                 if (typeof value === 'object') {
                     value = JSON.stringify(value, null, 2);
                 }
@@ -635,9 +533,8 @@ function showElementMetadata(svgElement, clickableElement, currentNode) {
         }
     }
     
-    // Om ingen metadata finns
     if (html === '') {
-        html = '<p style="text-align: center; color: var(--text-secondary);">Ingen metadata tillgänglig för detta block.</p>';
+        html = '<p style="text-align: center; color: var(--text-secondary);">Ingen metadata tillgänglig.</p>';
     }
     
     elements.popupContent.innerHTML = html;
@@ -652,101 +549,101 @@ function closeMetadataPopup() {
 }
 
 /**
- * Hantera dubbelklick på SVG-element (navigation)
+ * Hantera dubbelklick - navigering (fixad för hierarchy_type)
  */
 function handleSVGElementDoubleClick(svgElement, clickableElement, currentNode) {
-    const elementId = svgElement.getAttribute('id');
-    console.log('Dubbelklick - navigerar till:', elementId);
-    
-    // Stäng popup om den är öppen
     closeMetadataPopup();
     
-    // Hitta matchande barn-nod
-    const matchingChild = currentNode.children.find(child => 
-        child.name === clickableElement.name || 
-        child.svg_element_id === clickableElement.id
-    );
+    console.log('🔎 Dubbelklick på:', clickableElement.name);
+    console.log('   hierarchy_type:', clickableElement.hierarchy_type);
+    console.log('   has_children:', clickableElement.has_children);
+    console.log('   hid:', clickableElement.hid);
     
-    if (matchingChild) {
-        console.log('Navigerar till:', matchingChild.name);
-        loadNode(matchingChild);
+    // Kolla hierarchy_type
+    if (clickableElement.hierarchy_type === 'internal') {
+        // SubSystem med barn i samma hierarki
+        const matchingChild = currentNode.children.find(child => 
+            child.hid === clickableElement.hid
+        );
         
-        // Markera i trädet
-        document.querySelectorAll('.tree-item').forEach(item => {
-            if (item.textContent.includes(matchingChild.name)) {
-                item.classList.add('active');
-                item.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-            } else {
-                item.classList.remove('active');
-            }
-        });
-    } else {
-        console.log('Ingen undermodul hittades för:', clickableElement.name);
-        // Visa meddelande att det inte finns någon undermodul
-        showError('Detta block har ingen undermodul att navigera till.');
+        if (matchingChild) {
+            console.log('✅ Navigerar till internal:', matchingChild.name);
+            loadNode(matchingChild);
+            
+            document.querySelectorAll('.tree-item').forEach(item => {
+                if (item.textContent.includes(matchingChild.name)) {
+                    item.classList.add('active');
+                    item.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                } else {
+                    item.classList.remove('active');
+                }
+            });
+        } else {
+            console.error('❌ Kunde inte hitta barn-nod med hid:', clickableElement.hid);
+            showError('Kunde inte navigera till barn-nod.');
+        }
+    } 
+    else if (clickableElement.hierarchy_type === 'external') {
+        // ModelReference med egen hierarki
+        console.log('📊 Extern hierarki:', clickableElement.external_hierarchy);
+        console.log('📊 SVG:', clickableElement.svg);
+        
+        // TODO: Implementera laddning av extern hierarki
+        showError(`ModelReference "${clickableElement.name}" har egen hierarki (${clickableElement.external_hierarchy}).\n\nSteg att implementera:\n1. Ladda ${clickableElement.external_hierarchy}\n2. Bygg nytt träd\n3. Visa ${clickableElement.svg}`);
+        
+        // Tillfällig lösning: visa bara SVG:n
+        loadSVGOnly(clickableElement.svg, clickableElement.name);
+    }
+    else if (clickableElement.hierarchy_type === 'leaf') {
+        // Leaf node - ingen vidare navigation
+        console.log('🍃 Leaf node, ingen vidare navigation');
+        showError(`"${clickableElement.name}" är en leaf node (inga undermoduler).`);
+    }
+    else {
+        // Ingen hierarchy_type (gammal data?)
+        console.warn('⚠️  Ingen hierarchy_type definierad, försöker gammal logik');
+        
+        const matchingChild = currentNode.children.find(child => 
+            child.name === clickableElement.name
+        );
+        
+        if (matchingChild) {
+            console.log('✅ Navigerar till (fallback):', matchingChild.name);
+            loadNode(matchingChild);
+        } else {
+            showError('Detta block har ingen undermodul att navigera till.');
+        }
     }
 }
 
 /**
- * Hantera klick på SVG-element (LEGACY - används i fallback)
- * Använder clickable_elements från JSON för att mappa SVG-ID till fil
+ * Ladda endast SVG utan navigation (för leaf nodes)
  */
-function handleSVGElementClick(element, currentNode) {
-    const elementId = element.getAttribute('id');
-    console.log('SVG-element klickat:', elementId);
+async function loadSVGOnly(svgFilename, elementName) {
+    showLoading(true);
     
-    if (!elementId) {
-        console.log('Element har inget ID');
-        return;
-    }
-    
-    // Använd clickable_elements mappning från JSON-metadata
-    if (currentNode.clickable_elements && currentNode.clickable_elements.length > 0) {
-        // Hitta matchande element i clickable_elements
-        const clickableElement = currentNode.clickable_elements.find(ce => {
-            // Exakt matchning på ID
-            if (ce.id === elementId) return true;
-            
-            // Partial matchning (ID kan innehålla namespace, t.ex "PS200:23345")
-            if (ce.id && elementId.includes(ce.id)) return true;
-            if (elementId.includes(ce.id)) return true;
-            
-            // Matchning på filnamn
-            if (ce.name && elementId.toLowerCase().includes(ce.name.toLowerCase())) return true;
-            
-            return false;
-        });
+    try {
+        const response = await fetch(
+            `${API_BASE_URL}/product/${state.currentProduct}/version/${state.currentVersion}/file/${svgFilename}`
+        );
         
-        if (clickableElement) {
-            console.log('Hittade klickbart element:', clickableElement);
-            
-            // Hitta motsvarande barn-nod
-            const matchingChild = currentNode.children.find(child => 
-                child.name === clickableElement.name || 
-                child.svg_element_id === clickableElement.id
-            );
-            
-            if (matchingChild) {
-                console.log('Navigerar till:', matchingChild.name);
-                loadNode(matchingChild);
-                
-                // Markera i trädet
-                document.querySelectorAll('.tree-item').forEach(item => {
-                    if (item.textContent.includes(matchingChild.name)) {
-                        item.classList.add('active');
-                        item.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-                    } else {
-                        item.classList.remove('active');
-                    }
-                });
-            } else {
-                console.log('Fil finns inte för:', clickableElement.name);
-            }
-        } else {
-            console.log('Inget klickbart element hittades för ID:', elementId);
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
         }
-    } else {
-        console.log('Inga klickbara element i denna nod');
+        
+        const svgText = await response.text();
+        
+        // Visa SVG utan att ändra träd-state
+        elements.svgStackContainer.innerHTML = svgText;
+        elements.currentFileName.textContent = `${elementName} (${svgFilename})`;
+        
+        console.log(`🇮 Laddade SVG: ${svgFilename}`);
+        
+    } catch (error) {
+        console.error('❌ Fel vid laddning av SVG:', error);
+        showError(`Kunde inte ladda ${svgFilename}: ${error.message}`);
+    } finally {
+        showLoading(false);
     }
 }
 
@@ -766,14 +663,6 @@ function updateFileInfo(node) {
         </div>
     `;
     
-    if (node.metadata) {
-        html += `
-            <div class="info-row">
-                <span class="info-label">Metadata:</span> ✓ Tillgänglig
-            </div>
-        `;
-    }
-    
     if (node.children && node.children.length > 0) {
         html += `<hr style="margin: 0.75rem 0; border: none; border-top: 1px solid var(--border-color);">`;
         html += `<div style="font-size: 0.75rem; font-weight: 600; margin-bottom: 0.5rem; color: var(--text-secondary);">UNDERLIGGANDE:</div>`;
@@ -792,11 +681,12 @@ function showWelcomeScreen() {
     elements.welcomeScreen.classList.remove('hidden');
     elements.mainApp.classList.add('hidden');
     
-    // Rensa state
     state.currentVersion = null;
     state.currentProduct = null;
     state.navigationTree = null;
     state.currentNode = null;
+    
+    loadProducts();
 }
 
 /**
@@ -808,7 +698,7 @@ function showMainApp() {
 }
 
 /**
- * Justera zoom
+ * Zoom-funktioner
  */
 function adjustZoom(factor) {
     state.zoomLevel *= factor;
@@ -816,17 +706,11 @@ function adjustZoom(factor) {
     applyZoom();
 }
 
-/**
- * Återställ zoom
- */
 function resetZoom() {
     state.zoomLevel = 1.0;
     applyZoom();
 }
 
-/**
- * Anpassa till skärm
- */
 function fitToScreen() {
     const svg = elements.svgStackContainer.querySelector('svg');
     if (!svg) return;
@@ -840,13 +724,10 @@ function fitToScreen() {
     const scaleX = containerWidth / svgWidth;
     const scaleY = containerHeight / svgHeight;
     
-    state.zoomLevel = Math.min(scaleX, scaleY) * 0.9; // 90% av max för padding
+    state.zoomLevel = Math.min(scaleX, scaleY) * 0.9;
     applyZoom();
 }
 
-/**
- * Tillämpa zoom på SVG
- */
 function applyZoom() {
     const svgLayers = elements.svgStackContainer.querySelectorAll('.svg-layer svg');
     svgLayers.forEach(svg => {
@@ -860,7 +741,6 @@ function applyZoom() {
  * Tangentbordsgenvägar
  */
 function handleKeyboardShortcuts(event) {
-    // Förhindra genvägar när man skriver i input-fält
     if (event.target.tagName === 'INPUT' || event.target.tagName === 'SELECT') {
         return;
     }
@@ -885,11 +765,10 @@ function handleKeyboardShortcuts(event) {
             event.preventDefault();
             break;
         case 'Escape':
-            // Stäng popup först om den är öppen
             if (!elements.metadataPopup.classList.contains('hidden')) {
                 closeMetadataPopup();
-            } else if (!elements.mainApp.classList.contains('hidden')) {
-                showWelcomeScreen();
+            } else {
+                handleBackButton();
             }
             event.preventDefault();
             break;
@@ -912,9 +791,8 @@ function showLoading(show) {
  */
 function showError(message) {
     console.error(message);
-    alert(message); // Enkelt för nu, kan ersättas med bättre UI senare
+    alert(message);
 }
 
-// Exportera för debugging
 window.appState = state;
 window.appElements = elements;

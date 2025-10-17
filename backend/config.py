@@ -9,11 +9,11 @@ class Config:
     """Bas-konfiguration"""
     
     # Nätverksmapp - ÄNDRA DETTA TILL DIN FAKTISKA SÖKVÄG
-    NETWORK_PATH = os.environ.get('NETWORK_PATH', r'\\network\System_Releases')
+    NETWORK_PATH = Path(os.getenv('NETWORK_PATH', r"\\FS01\release_hub$\System_Releases")).resolve()
     
     # Lokal testmapp (om nätverket inte är tillgängligt)
-    LOCAL_TEST_PATH = os.environ.get('LOCAL_TEST_PATH', r'C:\TestData\System_Releases')
-    
+    LOCAL_TEST_PATH = Path(os.getenv('LOCAL_TEST_PATH', r'C:\TestData\System_Releases')).resolve()
+
     # Välj vilken sökväg som ska användas
     USE_NETWORK = os.environ.get('USE_NETWORK', 'True').lower() == 'true'
     BASE_PATH = NETWORK_PATH if USE_NETWORK else LOCAL_TEST_PATH
